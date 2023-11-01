@@ -1,0 +1,23 @@
+{
+    "private": true,
+    "name": "treemapcustomvis",
+    "version": "0.1.0",
+    "scripts": {
+        "start": "nr1 nerdpack:serve",
+        "test": "exit 0"
+    },
+    "nr1": {
+        "uuid": "d43f11e9-ed2b-4807-8a0a-ca1b6acf6234"
+    },
+    "dependencies": {
+        "prop-types": "15.7.2",
+        "react": "17.0.2",
+        "react-dom": "17.0.2",
+        "recharts": "^2.9.1"
+    },
+    "browserslist": [
+        "last 2 versions",
+        "not ie < 11",
+        "not dead"
+    ]
+}
