@@ -6,8 +6,94 @@ import {
     PolarGrid,
     PolarAngleAxis,
     PolarRadiusAxis,
+    Treemap,
+    Tooltip
 } from 'recharts';
-import {Card, CardBody, HeadingText, NrqlQuery, Spinner, AutoSizer} from 'nr1';
+import { Card, CardBody, HeadingText, NrqlQuery, Spinner, AutoSizer } from 'nr1';
+
+const TESTDATA = [
+    {
+        name: "melyprodcluster25",
+        children: [
+            { name: "Nutanix-Storage-MELYProdCluster24 (50.4TB)", size: 50.4 },
+            { name: "NutanixManagementShare (44.7TB)", size: 44.7 },
+            { name: "Nutanix_MELYVPINTXFS1_ctr (44.7TB)", size: 44.7 },
+            { name: "SelfServiceContainer (44.7TB)", size: 44.7 },
+            { name: "default-container-41968751240954 (44.7TB)", size: 44.7 }
+        ]
+    },
+    {
+        name: "melyprodcluster28",
+        children: [
+            { name: "Nutanix-Storage-A (20.4TB)", size: 20.4 },
+            { name: "Nutanix-Storage-B (30.7TB)", size: 30.7 },
+            { name: "Nutanix-Storage-C (44.7TB)", size: 44.7 },
+            { name: "Nutanix-Storage-D (50.7TB)", size: 50.7 },
+            { name: "Nutanix-Storage-E (10.7TB)", size: 10.7 }
+        ]
+    }
+];
+
+const COLORS = [
+    "#8889DD",
+    "#9597E4",
+    "#8DC77B",
+    "#A5D297",
+    "#E2CF45",
+    "#F8C12D"
+];
+
+const CustomizedContent = (props) => {
+    const {
+        root,
+        depth,
+        x,
+        y,
+        width,
+        height,
+        index,
+        colors,
+        name,
+        value
+    } = props;
+
+    return (
+        <g>
+            <rect
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                style={{
+                    fill:
+                        depth < 2
+                            ? colors[Math.floor((index / root.children.length) * 6)]
+                            : "none",
+                    stroke: "#fff",
+                    strokeWidth: 2 / (depth + 1e-10),
+                    strokeOpacity: 1 / (depth + 1e-10)
+                }}
+            />
+            {depth > 1 && depth <= 3 ? (
+                <text
+                    x={x + width / 2}
+                    y={y + height / 2 + 7}
+                    textAnchor="middle"
+                    fontSize={13}
+                    fill="white"
+                    strokeOpacity={0}
+                >
+                    {name}
+                </text>
+            ) : null}
+            {depth === 1 ? (
+                <text x={x + 10} y={y + 40} fill="#fff" fontSize={30} fillOpacity={100}>
+                    Cluster: {name}
+                </text>
+            ) : null}
+        </g>
+    );
+};
 
 export default class TreemapCustomVisVisualization extends React.Component {
     // Custom props you wish to be configurable in the UI must also be defined in
@@ -42,12 +128,49 @@ export default class TreemapCustomVisVisualization extends React.Component {
      * (https://recharts.org/api/RadarChart).
      */
     transformData = (rawData) => {
-        return rawData.map((entry) => ({
-            name: entry.metadata.name,
-            // Only grabbing the first data value because this is not time-series data.
-            value: entry.data[0].y,
-        }));
-    };
+        const roundToTB = n => (n / 1_000_000_000_000).toFixed(2);
+        return rawData.map(x => ({
+            name: x.metadata.name,
+            size: x.data[0].y
+        })).reduce((pre, cur) => {
+            // facet involved
+            var levels = cur.name.split(', ');
+            if (levels.length > 1) {
+                // facet involved
+                return [
+                    ...pre,
+                    {
+                        name: levels[0],
+                        children: [
+                            {
+                                name: `${roundToTB(cur.size) > 45 ? '🆘':'✅'} ${levels[1]} - ${roundToTB(cur.size)}TB`,
+                                size: cur.size
+                            }
+                        ]
+                    }
+                ]
+            } else {
+                return [
+                    ...pre,
+                    cur
+                ]
+            }
+        }, [])
+            .reduce((pre, cur) => {
+                const toplevels = pre.filter(x => x.name === cur.name);
+                if (toplevels?.length > 0) {
+                    const toplevel = toplevels[0];
+                    toplevel.children.push(...cur.children);
+                    return pre;
+                } else {
+                    return [
+                        ...pre,
+                        cur
+                    ]
+                }
+            }, [])
+            ;
+    }
 
     /**
      * Format the given axis tick's numeric value into a string for display.
@@ -57,7 +180,7 @@ export default class TreemapCustomVisVisualization extends React.Component {
     };
 
     render() {
-        const {nrqlQueries, stroke, fill} = this.props;
+        const { nrqlQueries, stroke, fill } = this.props;
 
         const nrqlQueryPropsAvailable =
             nrqlQueries &&
@@ -71,13 +194,13 @@ export default class TreemapCustomVisVisualization extends React.Component {
 
         return (
             <AutoSizer>
-                {({width, height}) => (
+                {({ width, height }) => (
                     <NrqlQuery
                         query={nrqlQueries[0].query}
                         accountId={parseInt(nrqlQueries[0].accountId)}
                         pollInterval={NrqlQuery.AUTO_POLL_INTERVAL}
                     >
-                        {({data, loading, error}) => {
+                        {({ data, loading, error }) => {
                             if (loading) {
                                 return <Spinner />;
                             }
@@ -89,23 +212,17 @@ export default class TreemapCustomVisVisualization extends React.Component {
                             const transformedData = this.transformData(data);
 
                             return (
-                                <RadarChart
+                                <Treemap
                                     width={width}
                                     height={height}
                                     data={transformedData}
+                                    dataKey="size"
+                                    stroke="#fff"
+                                    fill="#8884d8"
+                                    content={<CustomizedContent colors={COLORS} />}
                                 >
-                                    <PolarGrid />
-                                    <PolarAngleAxis dataKey="name" />
-                                    <PolarRadiusAxis
-                                        tickFormatter={this.formatTick}
-                                    />
-                                    <Radar
-                                        dataKey="value"
-                                        stroke={stroke || '#51C9B7'}
-                                        fill={fill || '#51C9B7'}
-                                        fillOpacity={0.6}
-                                    />
-                                </RadarChart>
+                                    <Tooltip />
+                                </Treemap>
                             );
                         }}
                     </NrqlQuery>
